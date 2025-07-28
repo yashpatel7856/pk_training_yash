@@ -120,8 +120,7 @@ stock = Stock("TSLA", 800, 100)
 
 book = OrderBook()
 book.add_Order(Order(user1, stock, 5, 810, "BUY"))
-book.add_Order(Order(user2, stock, 10, 800, "SELL"))
-book.add_Order(Order(user1, stock, 5, 810, "BUY"))
+book.add_Order(Order(user2, stock, 5, 800, "SELL"))
 
 book.match_orders()
 
