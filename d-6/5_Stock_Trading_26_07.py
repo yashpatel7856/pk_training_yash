@@ -33,13 +33,14 @@
 # 9000
 
 # start time : 6:05
-# end time : 
+# end time : 10:42
 
 class User:
     def __init__(self,name,walletBalance):
         self.name=name
         self.walletBalance=walletBalance
         self.portfolio={}
+
 class Stock:
     def __init__(self,name,basePrice,stockQuantity):
         self.name=name
@@ -59,34 +60,71 @@ class OrderBook:
     def __init__(self):
         self.order_book=[]
 
-    def add_Order(self,order) :
+    def add_Order(self,order):
         self.order_book.append(order.__dict__)
 
     def match_orders(self):
-        pass
-        sellOrders={}
-        buyOrders={}
-        for order in self.order_book:  
-            if order["stock"].availableInMarket>=order["stockQuantity"]:
-                if order["orderType"]=='BUY':
-                    buyOrders[order["stock"].name]=order["stockQuantity"]
-                else:
-                    sellOrders[order["stock"].name]=order["stockQuantity"]
-            else:
-                print(f'Can not {order["orderType"]} stocks more than the quantity available in market order discarded')
-        print("sellOrder---",sellOrders)
-        print("buyOrder----",buyOrders)
+        remaining_orders = []
 
+        for buy_order in self.order_book:
+            if buy_order["orderType"] != "BUY":
+                remaining_orders.append(buy_order)
+                continue
 
+            for sell_order in self.order_book:
+                if sell_order["orderType"] != "SELL":
+                    continue
+
+                if buy_order["stock"].name != sell_order["stock"].name:
+                    continue
+
+                if buy_order["stockPrice"] >= sell_order["stockPrice"] and buy_order["stockQuantity"] > 0 and sell_order["stockQuantity"] > 0:
+                    traded_qty = min(buy_order["stockQuantity"], sell_order["stockQuantity"])
+                    trade_price = sell_order["stockPrice"] #when buyer is willing to pay more price but he can get same thing at cheaper price order book will give him lower price 
+
+                    if buy_order["user"].walletBalance<traded_qty * trade_price:
+                        print(f'{buy_order["user"].name} do not have sufficient Funds in Wallet to Complete the trade')
+                        continue
+
+                    buy_order["user"].walletBalance -= traded_qty * trade_price
+                    sell_order["user"].walletBalance += traded_qty * trade_price
+
+                    if buy_order["stock"].name in buy_order["user"].portfolio:
+                        buy_order["user"].portfolio[buy_order["stock"].name] += traded_qty
+                    else:
+                        buy_order["user"].portfolio[buy_order["stock"].name] = traded_qty
+
+                    if sell_order["stock"].name in sell_order["user"].portfolio:
+                        if sell_order["user"].portfolio[sell_order["stock"].name] >= traded_qty:
+                            sell_order["user"].portfolio[sell_order["stock"].name]-=traded_qty
+                        else:
+                            pass ## traded quantity is greater than actual stock quantity in portfolio
+                    else:
+                        pass ##stock is not present in portfolio
+
+                    buy_order["stockQuantity"] -= traded_qty
+                    sell_order["stockQuantity"] -= traded_qty
+
+                    print(f"Trade: {traded_qty} shares of {buy_order['stock'].name} at {trade_price}")
+                    break
+
+            if buy_order["stockQuantity"] > 0:
+                remaining_orders.append(buy_order)
+
+        self.order_book = [order for order in remaining_orders if order["stockQuantity"] > 0] 
+        # print(self.order_book) 
 
 user1 = User("Alice", 10000)
 user2 = User("Bob", 5000)
-stock = Stock("TSLA", 800,555)
+stock = Stock("TSLA", 800, 100)
 
 book = OrderBook()
 book.add_Order(Order(user1, stock, 5, 810, "BUY"))
-book.add_Order(Order(user2, stock, 5, 800, "SELL"))
+book.add_Order(Order(user2, stock, 10, 800, "SELL"))
+book.add_Order(Order(user1, stock, 5, 810, "BUY"))
 
 book.match_orders()
-# print(user1.portfolio)
-# print(user2.balance) 
+
+print(user1.portfolio)
+print(user1.walletBalance)
+print(user2.walletBalance)
