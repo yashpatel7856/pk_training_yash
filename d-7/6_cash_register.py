@@ -95,7 +95,8 @@ class User:
         userdata=None
         
         if not os.path.exists(defaultFileName):
-            with open(defaultFileName,'w+') as f:
+            with open(defaultFileName,'w') as f:
+                transaction.user["walletBalance"]-=transaction.purchaseAmount
                 transaction.user["lowestTransactionValue"]=transaction.purchaseAmount
                 transaction.user["highestTransactionValue"]=transaction.purchaseAmount
                 transaction.user["recentPurchaseTimeStamp"]=transaction.timestamp
@@ -103,17 +104,46 @@ class User:
                 f.write(json.dumps([transaction.user]))
                 return
 
-        with open(defaultFileName,"a+") as file:
-            userdata=json.load(file)
-            for user in userdata:
+        with open(defaultFileName,"r+") as file:
+            try:
+                userdata=json.load(file)
+            except json.JSONDecodeError:
+                userdata=[] # just in case reading fails program will not crash only the data will be lost
+            tempUserObj=None
+            flag=False
+            tempUserList=[]
+            for user in userdata: 
+                if user["walletBalance"]<transaction.purchaseAmount:
+                    print(f'Insufficient Funds user={user["name"]},Balance={user["walletBalance"]}')
+                    return 0
                 if user["mobileNumber"]==transaction.user["mobileNumber"]:
+                    user["walletBalance"]-=transaction.purchaseAmount
                     user["transactions"].append({"purchaseAmount":transaction.purchaseAmount,"timestamp":transaction.timestamp})
                     if user["lowestTransactionValue"] >transaction.purchaseAmount or  user["lowestTransactionValue"]==0: 
                         user["lowestTransactionValue"] = transaction.purchaseAmount
                     if user["highestTransactionValue"] < transaction.purchaseAmount:
                         user["highestTransactionValue"]=transaction.purchaseAmount
                     user["recentPurchaseTimeStamp"]=transaction.timestamp
-            json.dump(userdata,file)
+                    flag=False
+                    break
+                else:
+                    tempUserObj=transaction.user
+                    flag=True
+            if flag:
+                tempUserObj["walletBalance"]-=transaction.purchaseAmount
+                if tempUserObj["lowestTransactionValue"]> transaction.purchaseAmount or tempUserObj["lowestTransactionValue"]==0:
+                    tempUserObj["lowestTransactionValue"]=transaction.purchaseAmount
+                if tempUserObj["highestTransactionValue"]<transaction.purchaseAmount:
+                    tempUserObj["highestTransactionValue"]=transaction.purchaseAmount
+                tempUserObj["transactions"].append({"purchaseAmount":transaction.purchaseAmount,"timestamp":transaction.timestamp})
+                tempUserObj["recentPurchaseTimeStamp"]=transaction.timestamp
+                tempUserList.append(tempUserObj)
+            userdata+=tempUserList
+            file.seek(0)  ## move the pointer to strt of file
+            file.truncate() ##delete all data of file
+            json.dump(userdata, file)
+            
+            # json.dump(userdata,file)
             
 #  defaultFileName='user_data.json'
 #         userData=None
@@ -148,15 +178,10 @@ class CashRegister:
         beforeTaxValue=purchaseAmount-purchaseAmount*discount
         finalInvoiceValue=beforeTaxValue+beforeTaxValue*0.18
 
-        if user.isPurchaseable(finalInvoiceValue):
-            transaction=Transaction(user,finalInvoiceValue)
-            user.updateUserData(transaction)
-            self.transactionHistory.append(transaction.__dict__)
-            return transaction
-        else:
-            print(f"Insufficient Balance. user={user.name}, walletBalance={user.walletBalance}")
-            return f"Insufficient Balance. user={user.name}, walletBalance={user.walletBalance}"
-
+        transaction=Transaction(user,finalInvoiceValue)
+        user.updateUserData(transaction)
+        self.transactionHistory.append(transaction.__dict__)
+        return transaction
 
     def getTransactionHistory(self):
         return self.transactionHistory
@@ -195,8 +220,8 @@ class CashRegister:
         return "No User found"
 
 
-u1=User("yash","yashpatel7856","9510877350",100000)
-u2=User("raj","raj080","5123456789",235)
+# u1=User("yash","yashpatel7856","9510877350",100000)
+# u2=User("raj","raj080","5123456789",100)
 
 c1=CashRegister("hariom veg")
 
