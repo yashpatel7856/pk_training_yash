@@ -49,11 +49,12 @@
 # Transaction history tracking.
 
 # start time : 3:00
-# end time : 
+# end time :   3:37 29/07/2025
 
 import time
 import json
 import os
+import sys
 
 class User:
     def __init__(self,name,userName,mobileNumber,walletBalance):
@@ -90,6 +91,11 @@ class User:
             return False
         
     @staticmethod
+    def createNewUser(name,userName,phoneNumber):
+        user =User(name,userName,phoneNumber,sys.maxsize)
+        return user.__dict__
+
+    @staticmethod
     def updateUserData(transaction):
         defaultFileName='user_data.json'
         userdata=None
@@ -113,10 +119,10 @@ class User:
             flag=False
             tempUserList=[]
             for user in userdata: 
-                if user["walletBalance"]<transaction.purchaseAmount:
-                    print(f'Insufficient Funds user={user["name"]},Balance={user["walletBalance"]}')
-                    return 0
                 if user["mobileNumber"]==transaction.user["mobileNumber"]:
+                    if user["walletBalance"]<transaction.purchaseAmount:
+                        print(f'Insufficient Funds user={user["name"]},Balance={user["walletBalance"]}')
+                        return 0
                     user["walletBalance"]-=transaction.purchaseAmount
                     user["transactions"].append({"purchaseAmount":transaction.purchaseAmount,"timestamp":transaction.timestamp})
                     if user["lowestTransactionValue"] >transaction.purchaseAmount or  user["lowestTransactionValue"]==0: 
@@ -157,18 +163,29 @@ class User:
 
 class Transaction:
     def __init__(self,user,purchaseAmount,timestamp=time.time()):
-        self.user=user.__dict__
+        # self.user=user.__dict__
         self.purchaseAmount=purchaseAmount
-        self.timestamp=timestamp
+        self.timestamp = timestamp
+        if isinstance(user, User):
+            self.user=user.__dict__
+        else:
+            self.user=user
 
 class CashRegister:
+    customerOfTheMonth=None
     def __init__(self,shopName):
         self.shopName=shopName
         self.transactionHistory=[]
     
     def checkOut(self,user,purchaseAmount,coupon=''):
         weekDay=time.localtime().tm_wday
+        month=time.localtime().tm_mon
         discount=0
+
+        if CashRegister.customerOfTheMonth!=None:
+            if CashRegister.customerOfTheMonth["month"] == month and CashRegister.customerOfTheMonth["mobileNumber"]==user["mobileNumber"]:
+                discount+=0.1
+
         if weekDay>=5:
             discount=0.3 #30%
         
@@ -179,7 +196,7 @@ class CashRegister:
         finalInvoiceValue=beforeTaxValue+beforeTaxValue*0.18
 
         transaction=Transaction(user,finalInvoiceValue)
-        user.updateUserData(transaction)
+        User.updateUserData(transaction)
         self.transactionHistory.append(transaction.__dict__)
         return transaction
 
@@ -210,14 +227,61 @@ class CashRegister:
     def findUserData(self,data):
         defaultFileName='user_data.json'
         userData=None
-        with open(defaultFileName,'w+') as file:
-            userData=json.load(file)
+        with open(defaultFileName,'r') as file:
+            try:
+                userData=json.load(file)
+            except json.JSONDecodeErro:
+                userData=[]
         for user in userData:
             if user["mobileNumber"]==data or user["userName"]==data:
                 print(user)
+                totalspendings=0
+                for transaction in user["transactions"]:
+                    totalspendings+=transaction["purchaseAmount"]
+                print(f'current total Spending = {totalspendings}  ')
                 return user
         print("No user Found with this phone number")
-        return "No User found"
+        return 0
+
+    @staticmethod
+    def GetCustomerOfTheMonth():
+        currentMonth=time.localtime(time.time()).tm_mon
+        userDataObj={
+            "mobileNumber":"",
+            "monthTotalTransactionAmount":0
+        }##data of user who have transaction in current month
+        defaultFileName='user_data.json'
+        userData=None
+        with open(defaultFileName,'r') as file:
+            try:
+                userData=json.load(file)
+            except json.JSONDecodeErro:
+                userData=[]
+        for user in userData:
+            totalTransactionAmount=0
+            hasCurrentMonthTransactions=False
+            for transaction in user["transactions"]:
+                if currentMonth==time.localtime(transaction["timestamp"]).tm_mon:
+                    totalTransactionAmount+=transaction["purchaseAmount"]
+                    hasCurrentMonthTransactions=True
+            if hasCurrentMonthTransactions:
+                if userDataObj["monthTotalTransactionAmount"]<totalTransactionAmount:
+                    userDataObj["monthTotalTransactionAmount"]=totalTransactionAmount
+                    userDataObj["mobileNumber"]=user["mobileNumber"]
+                    userDataObj["name"]=user["name"]
+        if userDataObj["monthTotalTransactionAmount"]!=0:
+            CashRegister.customerOfTheMonth={
+                                                "monthTotalTransactionAmount":userDataObj["monthTotalTransactionAmount"],
+                                                "mobileNumber":userDataObj["mobileNumber"],
+                                                "month":currentMonth
+                                            }
+            print(f'{userDataObj["name"]} is customer of the month[{currentMonth}]. total spendings={userDataObj["monthTotalTransactionAmount"]}')
+            return 
+        print("No customer chhosen to be customer of the month")
+        
+
+
+        
 
 
 # u1=User("yash","yashpatel7856","9510877350",100000)
@@ -225,26 +289,30 @@ class CashRegister:
 
 c1=CashRegister("hariom veg")
 
-# c1.checkOut(u1,100,"OFF30%")
-# c1.checkOut(u1,100)
-# c1.checkOut(u2,199)
-
-
-
-# c1.findUserData("preet07")
-
 
 def startRegister():
         nextBill=True
+        getCustomerOfTheMonth=int(input("do you want to get customer of the month  yes=1 ,no=0"))
+        if getCustomerOfTheMonth==1:
+            CashRegister.GetCustomerOfTheMonth()
+        getUserData=int(input("to find a user data enter 1"))
+        if getUserData==1:
+            phoneNumber=input("enter users phone number to find")
+            c1.findUserData(phoneNumber)
         while nextBill:
-            u1=User("yash","yashpatel7856","9510877350",100000)
-            u2=User("raj","raj080","5123456789",235)
-            userId=int(input("enter user id(1/2)"))
+
+            userId=int(input("To create new user enter 1"))
             if userId==1:
-                print("u1")
-                user=u1
+                user=User.createNewUser(*getUserDatafromUser())
             else:
-                user=u2
+                phoneNumber=input("enter phone number of existing customer")
+                if len(phoneNumber)!=10:
+                    print("enter valid 10 digit phone number")
+                    continue
+                user=c1.findUserData(phoneNumber)
+                if user==0:
+                    continue
+
             purchaseAmount=CashRegister.getTotalBillingAmount()
             coupon=input("enter coupon code if any")
             transaction=c1.checkOut(user,purchaseAmount,coupon)
@@ -252,5 +320,14 @@ def startRegister():
             nextBill=input("stop billing / close shop(0/1)")
             if nextBill=="0":
                 break
+
+            
+
+def getUserDatafromUser():
+    name=input("enter User Name")
+    userName=input("enter a userName ")
+    phoneNumber=input("enter user phone number")
+
+    return (name,userName,phoneNumber)
 
 startRegister()
